@@ -1,0 +1,9 @@
+[package]
+name = "m5-common"
+version = "0.1.0"
+edition = "2021"
+description = "Board-independent application logic shared by Tab5 and M5Paper firmware"
+
+[dependencies]
+log = "0.4"
+embedded-graphics = "0.8"

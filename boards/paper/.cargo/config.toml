@@ -1,0 +1,16 @@
+[build]
+target = "xtensa-esp32-espidf"
+
+[target.xtensa-esp32-espidf]
+linker = "ldproxy"
+rustflags = ["--cfg", "espidf_time64"]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[env]
+MCU = "esp32"
+ESP_IDF_VERSION = "v5.5.1"
+# Share one ESP-IDF checkout/toolchain (~/.espressif) between both boards
+ESP_IDF_TOOLS_INSTALL_DIR = "global"
+ESP_IDF_SDKCONFIG_DEFAULTS = { value = "sdkconfig.defaults", relative = true }

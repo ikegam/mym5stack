@@ -1,0 +1,6 @@
+target/
+.embuild/
+sdkconfig
+sdkconfig.old
+.env
+preview.p*

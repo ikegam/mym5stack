@@ -1,0 +1,10 @@
+# M5Paper: ESP32-D0WDQ6-V3 (16MB flash, 8MB PSRAM)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# Partition table: ../../partitions.csv, applied by espflash at flash time
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# 8 ping workers + 4 port-scan connects + mDNS/DNS run at once (default 10)
+CONFIG_LWIP_MAX_SOCKETS=20
