@@ -20,6 +20,10 @@ boards/paper/       M5Paper binary crate
 Each board is its own cargo project because the two targets need different
 toolchains. Shared code goes in `common/`.
 
+**Using an AI coding agent?** Point it at [AGENTS.md](AGENTS.md): build
+quirks, ESP-IDF/Rust pitfalls and Tab5/M5Paper hardware details that took
+real debugging to find.
+
 ## Setup (once)
 
 ```sh
@@ -55,13 +59,16 @@ make help
 
 The Tab5 firmware runs Karpathy's [llama2.c](https://github.com/karpathy/llama2.c)
 `stories15M` model (15M params, trained on the TinyStories dataset) with int8
-weights in PSRAM and prints stories to the serial console.
+weights in PSRAM, and shows a short story built from today's weather on the
+screen with a small animated scene. Japanese stories use
+[opsbr/stories15M-ja](https://huggingface.co/opsbr/stories15M-ja) when its
+files are on the card.
 
 ```sh
-make llm-model          # -> llm/stories15M.q8 (17MB) + llm/tokenizer.bin
+make llm-model          # -> llm/stories15M{,-ja}.q8 + llm/tokenizer{,-ja}.bin
 ```
 
-Copy both files to the root of a FAT32 microSD card, insert it and
+Copy the files to the root of a FAT32 microSD card, insert it and
 `make fwup BOARD=tab5`. Try the model on the host first with
 `cd common && cargo run --release --example llm -- run ../llm/stories15M.q8 ../llm/tokenizer.bin "Once upon a time"`.
 
@@ -78,3 +85,8 @@ corner to pick another one on a map of Japan; the choice is saved to
   is set and the IDF-built bootloader (not espflash's bundled one) is flashed.
 - Change ESP-IDF version in `boards/*/.cargo/config.toml` (`ESP_IDF_VERSION`).
 - After editing `sdkconfig.defaults`, run `make clean BOARD=...` so it is reapplied.
+
+## License
+
+BSD 4-clause, see [LICENSE](LICENSE). Files derived from Espressif's BSP stay
+under Apache-2.0, and the Japan map data comes from 地球地図日本 (GSI).
