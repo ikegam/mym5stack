@@ -1,4 +1,37 @@
-# M5Stack Tab5 / M5Paper firmware (Rust)
+# mym5stack — Rust + ESP32 app patterns, ready for AI agents
+
+## Why this repo exists
+
+Building apps for ESP32 in Rust works well, but you have to work through
+silent build-config traps, driver quirks, version pinning and
+hardware-specific details first. Coding agents hit the same walls and burn
+many tokens and flash cycles rediscovering them.
+
+This repository collects those lessons as **working code plus written
+notes** from two real devices. Give it to your AI agent (or read it
+yourself) before starting a Rust + ESP32 project, so you start from what is
+known to work instead of trial and error:
+
+- [AGENTS.md](AGENTS.md): what broke and how it was fixed, written for
+  agents to read first. It covers the build system, ESP-IDF + Rust `std`
+  runtime, ESP32-P4 performance (PIE SIMD, PSRAM), Tab5 display, WiFi and
+  microSD, and the M5Paper e-paper.
+- Working examples of common needs:
+  - WiFi and HTTPS
+  - MIPI-DSI and SPI e-paper displays
+  - touch input
+  - microSD
+  - threads pinned to cores
+  - a C component next to Rust
+  - host-testable shared logic
+  - host-side screen previews
+- A larger end-to-end app: an int8 LLM running on the ESP32-P4 that writes
+  stories from today's weather forecast.
+
+日本語: Rust + ESP32 でアプリを作るときのつまずきどころと動くコードをまとめたリポジトリです。
+AI エージェントに最初に読ませると、試行錯誤とトークンを節約できます。
+
+## Boards
 
 Rust (std, ESP-IDF v5.5 via `esp-idf-svc`) firmware for two boards:
 
@@ -20,9 +53,9 @@ boards/paper/       M5Paper binary crate
 Each board is its own cargo project because the two targets need different
 toolchains. Shared code goes in `common/`.
 
-**Using an AI coding agent?** Point it at [AGENTS.md](AGENTS.md): build
-quirks, ESP-IDF/Rust pitfalls and Tab5/M5Paper hardware details that took
-real debugging to find.
+**Using an AI coding agent?** Tell it to read [AGENTS.md](AGENTS.md) first,
+then the code for the feature you need (e.g. `boards/tab5/src/net.rs` for
+WiFi + HTTPS). Claude Code picks AGENTS.md up automatically via `CLAUDE.md`.
 
 ## Setup (once)
 
