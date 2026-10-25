@@ -54,7 +54,7 @@ WITH_ENV = $(if $(ESP_ENV),. $(ESP_ENV) && ,)
 FLASH_OPTS = --chip $(CHIP) --partition-table $(PARTITIONS) --flash-size $(FLASH_SIZE) \
              $(if $(BOOTLOADER),--bootloader $(BOOTLOADER),)
 
-.PHONY: help setup build fwup flash monitor image erase info test preview clean distclean \
+.PHONY: help setup build fwup flash monitor image erase info test preview llm-model clean distclean \
         fwup-tab5 fwup-paper build-tab5 build-paper build-all
 
 help:
@@ -70,6 +70,7 @@ help:
 	@echo "  info         show chip/board info"
 	@echo "  test         run host unit tests for common/"
 	@echo "  preview      render the M5Paper screen with fake data to preview.png"
+	@echo "  llm-model    download + int8-quantize stories15M (en, ja) into llm/ (copy to the Tab5 SD card)"
 	@echo "  clean        cargo clean for BOARD"
 	@echo ""
 	@echo "  fwup-tab5 / fwup-paper / build-tab5 / build-paper / build-all"
@@ -83,6 +84,10 @@ setup:
 	@echo "  sudo usermod -aG uucp $$USER   (Arch)   /   dialout (Debian/Ubuntu)"
 
 build:
+	@# esp-idf-sys doesn't watch C components; it does watch sdkconfig.defaults,
+	@# so touching that makes it rerun ESP-IDF's (incremental) build.
+	@if [ -d $(BOARD_DIR)/components ] && [ -n "$$(find $(BOARD_DIR)/components -type f -newer $(BOARD_DIR)/sdkconfig.defaults)" ]; then \
+		touch $(BOARD_DIR)/sdkconfig.defaults; fi
 	cd $(BOARD_DIR) && $(WITH_ENV) cargo build $(CARGO_FLAGS)
 
 fwup: build flash
@@ -110,6 +115,24 @@ test:
 preview:
 	cd common && cargo run -q --example preview -- ../preview.pgm --active
 	@if command -v magick >/dev/null; then magick preview.pgm preview.png && rm preview.pgm && echo "wrote preview.png"; fi
+
+LLM_DIR := llm
+LLM_URL := https://huggingface.co/karpathy/tinyllamas/resolve/main/stories15M.bin
+TOK_URL := https://github.com/karpathy/llama2.c/raw/master/tokenizer.bin
+# Japanese: opsbr/stories15M-ja (same shape, trained on TinyStories-JA), MIT
+LLM_JA_URL := https://huggingface.co/opsbr/stories15M-ja/resolve/main/model.bin
+TOK_JA_URL := https://huggingface.co/opsbr/stories15M-ja/resolve/main/tokenizer.bin
+
+llm-model:
+	mkdir -p $(LLM_DIR)
+	test -f $(LLM_DIR)/stories15M.bin || curl -fL -o $(LLM_DIR)/stories15M.bin $(LLM_URL)
+	test -f $(LLM_DIR)/tokenizer.bin || curl -fL -o $(LLM_DIR)/tokenizer.bin $(TOK_URL)
+	test -f $(LLM_DIR)/stories15M-ja.bin || curl -fL -o $(LLM_DIR)/stories15M-ja.bin $(LLM_JA_URL)
+	test -f $(LLM_DIR)/tokenizer-ja.bin || curl -fL -o $(LLM_DIR)/tokenizer-ja.bin $(TOK_JA_URL)
+	cd common && cargo run -q --release --example llm -- quantize ../$(LLM_DIR)/stories15M.bin ../$(LLM_DIR)/stories15M.q8
+	cd common && cargo run -q --release --example llm -- quantize ../$(LLM_DIR)/stories15M-ja.bin ../$(LLM_DIR)/stories15M-ja.q8
+	@echo "copy the .q8 and tokenizer*.bin files in $(LLM_DIR)/ to the root of the Tab5 microSD card (FAT32);"
+	@echo "the Japanese model is used when present"
 
 clean:
 	cd $(BOARD_DIR) && cargo clean

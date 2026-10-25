@@ -4,7 +4,7 @@ Rust (std, ESP-IDF v5.5 via `esp-idf-svc`) firmware for two boards:
 
 | BOARD   | Device        | MCU                  | Rust target                | Toolchain          |
 |---------|---------------|----------------------|----------------------------|--------------------|
-| `tab5`  | M5Stack Tab5  | ESP32-P4 (RISC-V)    | `riscv32imafc-esp-espidf`  | `nightly`          |
+| `tab5`  | M5Stack Tab5  | ESP32-P4 (RISC-V)    | `riscv32imafc-esp-espidf`  | `esp` (from espup) |
 | `paper` | M5Paper       | ESP32 (Xtensa)       | `xtensa-esp32-espidf`      | `esp` (from espup) |
 
 ## Layout
@@ -50,6 +50,27 @@ make help
   doesn't enter download mode, hold BOOT while pressing RESET.
 - **M5Paper**: CH9102 USB-UART (`/dev/ttyUSB*` or `/dev/ttyACM*`). On battery,
   the board stays on only while firmware holds GPIO2 high (done in `main`).
+
+## Tab5: TinyStories LLM
+
+The Tab5 firmware runs Karpathy's [llama2.c](https://github.com/karpathy/llama2.c)
+`stories15M` model (15M params, trained on the TinyStories dataset) with int8
+weights in PSRAM and prints stories to the serial console.
+
+```sh
+make llm-model          # -> llm/stories15M.q8 (17MB) + llm/tokenizer.bin
+```
+
+Copy both files to the root of a FAT32 microSD card, insert it and
+`make fwup BOARD=tab5`. Try the model on the host first with
+`cd common && cargo run --release --example llm -- run ../llm/stories15M.q8 ../llm/tokenizer.bin "Once upon a time"`.
+
+Stories open with today's JMA forecast. Tap the region in the top-right
+corner to pick another one on a map of Japan; the choice is saved to
+`region.txt` on the card. The map (`common/src/japan_map.bin`) is built from
+[dataofjapan/land](https://github.com/dataofjapan/land) `japan.geojson`
+(source: 地球地図日本, GSI) with
+`cargo run --release --example japan_map_gen -- japan.geojson src/japan_map.bin`.
 
 ## Notes
 

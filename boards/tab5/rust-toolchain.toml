@@ -1,3 +1,4 @@
 [toolchain]
-channel = "nightly"
-components = ["rust-src"]
+# Upstream nightly's std currently fails to build for espidf (libc stat fields);
+# espup's toolchain also ships the RISC-V targets.
+channel = "esp"

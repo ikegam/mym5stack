@@ -74,6 +74,8 @@ pub enum Event {
 fn main() -> Result<()> {
     sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
+    // One INFO line per ping step would flood the UART during sweeps.
+    unsafe { sys::esp_log_level_set(c"esp_idf_svc::ping".as_ptr(), sys::esp_log_level_t_ESP_LOG_WARN) };
 
     let p = Peripherals::take()?;
     let sysloop = EspSystemEventLoop::take()?;
@@ -181,6 +183,7 @@ fn main() -> Result<()> {
             Ok(Event::Tap(x, y)) if ui::PORTS_BUTTON.contains(Point::new(x, y)) => {
                 if !scanning {
                     let up = scan.table.lock().unwrap().view().hosts.iter().filter(|h| h.1.is_some()).map(|h| h.0).collect();
+                    scan.set_paused(true);
                     ports.start(up, tx.clone());
                     buttons_changed = true;
                 }
@@ -193,7 +196,12 @@ fn main() -> Result<()> {
                 next_refresh = Instant::now() + SCROLL_SETTLE;
                 false
             }
-            Ok(Event::SweepDone | Event::PortScanDone) => {
+            Ok(Event::PortScanDone) => {
+                scan.set_paused(false);
+                next_refresh = Instant::now();
+                false
+            }
+            Ok(Event::SweepDone) => {
                 next_refresh = Instant::now();
                 false
             }
@@ -254,7 +262,17 @@ fn main() -> Result<()> {
         let mode = if refreshes % FULL_REFRESH_EVERY == 0 { Mode::Gc16 } else { Mode::Gl16 };
         epd.update_full(&fb, mode)?;
         refreshes += 1;
-        log::info!("refresh #{refreshes}: {} hosts, {} frames", hosts.len(), totals.frames);
+        let (free, block) = unsafe {
+            (
+                sys::heap_caps_get_free_size(sys::MALLOC_CAP_INTERNAL),
+                sys::heap_caps_get_largest_free_block(sys::MALLOC_CAP_INTERNAL),
+            )
+        };
+        log::info!(
+            "refresh #{refreshes}: {} hosts, {} frames, internal heap {free} free / {block} largest",
+            hosts.len(),
+            totals.frames
+        );
         next_refresh = Instant::now() + REFRESH;
     }
 }

@@ -11,6 +11,10 @@ harness = false # no test harness on target
 [profile.release]
 opt-level = "s"
 
+# LLM inference lives in m5-common; optimize it for speed
+[profile.release.package.m5-common]
+opt-level = 3
+
 [profile.dev]
 debug = true
 opt-level = "z"
@@ -20,6 +24,21 @@ anyhow = "1"
 log = "0.4"
 esp-idf-svc = "0.53"
 m5-common = { path = "../../common" }
+embedded-graphics = "0.8"
+u8g2-fonts = "0.8"
 
 [build-dependencies]
 embuild = "0.33"
+
+# MIPI-DSI panel bring-up in C (panel drivers come from the IDF component registry)
+[[package.metadata.esp-idf-sys.extra_components]]
+component_dirs = ["components/tab5_display"]
+
+# WiFi through the ESP32-C6 over SDIO. esp_hosted 1.x (what M5Stack's Tab5
+# demo uses) doesn't build against IDF 5.5's WiFi types, so this is the 2.0
+# line; esp_wifi_remote 1.1.6 is the newest release that accepts it.
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/esp_wifi_remote", version = "1.1.6" }
+
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/esp_hosted", version = "2.0.17" }

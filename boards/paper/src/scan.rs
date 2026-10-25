@@ -14,11 +14,15 @@ use m5_common::sniff::Mac;
 use crate::{net, Event};
 
 const WORKERS: usize = 8;
+/// Thread stacks live in internal RAM, which WiFi also needs; keep them lean.
+const WORKER_STACK: usize = 4096;
 const PING_TIMEOUT: Duration = Duration::from_millis(600);
 const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
 pub struct ActiveScan {
     enabled: Arc<AtomicBool>,
+    /// Set while a port scan runs; both need the scarce internal RAM/sockets.
+    paused: Arc<AtomicBool>,
     pub table: Arc<Mutex<ActiveTable>>,
     /// Kept across ON/OFF so names survive a toggle.
     pub names: Arc<Mutex<HostNames>>,
@@ -30,17 +34,24 @@ impl ActiveScan {
         let enabled = Arc::new(AtomicBool::new(false));
         let table = Arc::new(Mutex::new(ActiveTable::default()));
         let names = Arc::new(Mutex::new(HostNames::default()));
-        let (en, tb, nm) = (enabled.clone(), table.clone(), names.clone());
+        let paused = Arc::new(AtomicBool::new(false));
+        let gate = Gate { enabled: enabled.clone(), paused: paused.clone() };
+        let (tb, nm) = (table.clone(), names.clone());
         std::thread::Builder::new()
             .name("sweep".into())
             .stack_size(8192)
-            .spawn(move || run(me, prefix, dns, en, tb, nm, events))
+            .spawn(move || run(me, prefix, dns, gate, tb, nm, events))
             .expect("spawn sweep thread");
-        Self { enabled, table, names }
+        Self { enabled, paused, table, names }
     }
 
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Hold off sweeping (e.g. during a port scan) without changing ON/OFF.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
     }
 
     pub fn set_enabled(&self, on: bool) {
@@ -49,6 +60,18 @@ impl ActiveScan {
             self.table.lock().unwrap().clear();
         }
         log::info!("active scan {}", if on { "ON" } else { "OFF" });
+    }
+}
+
+#[derive(Clone)]
+struct Gate {
+    enabled: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
+}
+
+impl Gate {
+    fn open(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed) && !self.paused.load(Ordering::Relaxed)
     }
 }
 
@@ -70,7 +93,7 @@ fn run(
     me: Ipv4Addr,
     prefix: u8,
     dns: Ipv4Addr,
-    enabled: Arc<AtomicBool>,
+    gate: Gate,
     table: Arc<Mutex<ActiveTable>>,
     names: Arc<Mutex<HostNames>>,
     events: Sender<Event>,
@@ -79,7 +102,7 @@ fn run(
     let epoch = Instant::now();
     let mut sweep: u32 = 0;
     loop {
-        while !enabled.load(Ordering::Relaxed) {
+        while !gate.open() {
             std::thread::sleep(Duration::from_millis(200));
         }
         let start = Instant::now();
@@ -87,14 +110,14 @@ fn run(
         let next = Arc::new(AtomicUsize::new(0));
         let found: Arc<Mutex<Vec<(Ipv4Addr, Mac)>>> = Arc::default();
         let workers: Vec<_> = (0..WORKERS)
-            .map(|_| {
-                let (targets, next, table, enabled) = (targets.clone(), next.clone(), table.clone(), enabled.clone());
+            .filter_map(|_| {
+                let (targets, next, table, gate) = (targets.clone(), next.clone(), table.clone(), gate.clone());
                 let found = found.clone();
                 std::thread::Builder::new()
-                    .stack_size(6144)
+                    .stack_size(WORKER_STACK)
                     .spawn(move || loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
-                        if i >= targets.len() || !enabled.load(Ordering::Relaxed) {
+                        if i >= targets.len() || !gate.open() {
                             break;
                         }
                         let rtt = ping_once(targets[i]);
@@ -104,13 +127,15 @@ fn run(
                         let now = epoch.elapsed().as_millis() as u64;
                         table.lock().unwrap().record(targets[i], rtt, now);
                     })
-                    .expect("spawn ping worker")
+                    // Low on internal RAM: sweep with fewer workers rather than abort.
+                    .map_err(|e| log::warn!("ping worker: {e}"))
+                    .ok()
             })
             .collect();
         for w in workers {
             let _ = w.join();
         }
-        if !enabled.load(Ordering::Relaxed) {
+        if !gate.open() {
             continue;
         }
         {
@@ -127,7 +152,7 @@ fn run(
         let _ = events.send(Event::SweepDone);
 
         let wait_until = Instant::now() + SWEEP_INTERVAL.saturating_sub(took);
-        while Instant::now() < wait_until && enabled.load(Ordering::Relaxed) {
+        while Instant::now() < wait_until && gate.enabled.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(200));
         }
     }

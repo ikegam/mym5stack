@@ -7,10 +7,14 @@ pub mod active;
 pub mod battery;
 pub mod dns;
 pub mod fb;
+pub mod japan_map;
+pub mod llm;
 pub mod names;
 pub mod ports;
 pub mod sniff;
+pub mod tab5_ui;
 pub mod ui;
+pub mod weather;
 
 pub const FW_VERSION: &str = env!("CARGO_PKG_VERSION");
 
